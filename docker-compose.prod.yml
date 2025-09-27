@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: prod_postgres
+    restart: always
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Ejemplo de límites de recursos (Docker Swarm / Compose v3 en entornos soportados)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  backup:
+    build: ./docker/backup
+    container_name: prod_pg_backup
+    restart: always
+    depends_on:
+      - db
+    env_file: .env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - postgres_backups:/backups
+    networks:
+      - internal_net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+# Servicio opcional de pgAdmin: no se levanta en producción por defecto.
+#  pgadmin:
+#    image: dpage/pgadmin4:7
+#    container_name: prod_pgadmin
+#    restart: always
+#    depends_on:
+#      - db
+#    env_file: .env
+#    environment:
+#      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+#      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+#      PGADMIN_CONFIG_SERVER_MODE: 'True'
+#    ports:
+#      - "8080:80"
+#    volumes:
+#      - pgadmin_data:/var/lib/pgadmin
+#    networks:
+#      - internal_net
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: '0.5'
+#          memory: 512M
+#        reservations:
+#          cpus: '0.1'
+#          memory: 128M
+
+networks:
+  internal_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  postgres_backups:
+  # pgadmin_data: # Solo si se usa pgAdmin

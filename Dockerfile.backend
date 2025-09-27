@@ -1,0 +1,32 @@
+# Multi-stage Dockerfile para backend (NestJS + Node)
+# Etapa 1: Base para dependencias (cache optimizada)
+FROM node:20-alpine3.19 AS deps
+WORKDIR /app
+# Copiamos solo manifests (desde subcarpeta backend) para maximizar cache
+COPY backend/package.json backend/package-lock.json* backend/pnpm-lock.yaml* backend/yarn.lock* ./
+RUN npm install --ignore-scripts
+
+# Etapa 2: Build (transpilación TS)
+FROM node:20-alpine3.19 AS build
+WORKDIR /app
+# Usamos NODE_ENV=development aquí para instalar devDependencies necesarias (ts-node, typescript, etc.)
+ENV NODE_ENV=development
+COPY --from=deps /app/node_modules ./node_modules
+# Copiamos el código fuente del backend únicamente
+COPY backend/ ./
+# Asumimos script build compila a dist
+RUN npm run build
+
+# Etapa 3: Runtime mínimo
+FROM node:20-alpine3.19 AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=3000
+## Usuario no-root ya existe en la imagen oficial (node). Se omite creación.
+# Copiamos todo el árbol (incluye dist, src, config y node_modules) para poder correr migraciones TS
+COPY --from=build /app ./
+# Opcional: eliminar devDeps en producción real (omitido en dev compose)
+# RUN npm prune --omit=dev
+USER node
+EXPOSE 3000
+CMD ["node","dist/main.js"]

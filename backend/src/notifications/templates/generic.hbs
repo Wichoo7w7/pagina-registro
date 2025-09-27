@@ -1,0 +1,10 @@
+{{> header title="Notificación"}}
+<h1>{{title}}</h1>
+<p>Hola {{name}},</p>
+<p>{{message}}</p>
+{{#if ctaUrl}}
+<p style="text-align:center; margin:28px 0;">
+  <a class="btn" href="{{ctaUrl}}" target="_blank">{{ctaLabel}}</a>
+</p>
+{{/if}}
+{{> footer }}

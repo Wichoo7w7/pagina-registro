@@ -1,0 +1,9 @@
+{{> header title="Pago aprobado"}}
+<h1>¡Pago aprobado!</h1>
+<p>Hola {{name}},</p>
+<p>Tu pago con referencia <strong>{{paymentRef}}</strong> ha sido aprobado correctamente.</p>
+<p>Ya puedes acceder a los talleres y recursos correspondientes.</p>
+{{#if extraNote}}
+<p><em>{{extraNote}}</em></p>
+{{/if}}
+{{> footer }}

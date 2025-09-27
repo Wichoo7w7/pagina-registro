@@ -1,0 +1,96 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install root deps
+        run: |
+          if [ -f package.json ]; then npm ci || npm install; fi
+
+      - name: Backend install & build
+        run: |
+          if [ -f package.json ]; then npm run build || echo "No build script"; fi
+
+      - name: Frontend install & build
+        working-directory: ./frontend
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Lint frontend
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Docker multi-stage build (backend)
+        run: docker build -f Dockerfile.backend -t app-backend:ci .
+
+      - name: Docker multi-stage build (frontend)
+        run: docker build -f frontend/Dockerfile -t app-frontend:ci ./frontend
+
+  deploy-staging:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Login registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Build & push backend
+        run: |
+          docker build -f Dockerfile.backend -t ${{ secrets.REGISTRY_URL }}/app-backend:staging .
+          docker push ${{ secrets.REGISTRY_URL }}/app-backend:staging
+      - name: Build & push frontend
+        run: |
+          docker build -f frontend/Dockerfile -t ${{ secrets.REGISTRY_URL }}/app-frontend:staging ./frontend
+          docker push ${{ secrets.REGISTRY_URL }}/app-frontend:staging
+      - name: Deploy (placeholder)
+        run: echo "Ejecutar script/helm para staging" 
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Login registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Build & push backend
+        run: |
+          docker build -f Dockerfile.backend -t ${{ secrets.REGISTRY_URL }}/app-backend:${{ github.ref_name }} .
+          docker push ${{ secrets.REGISTRY_URL }}/app-backend:${{ github.ref_name }}
+      - name: Build & push frontend
+        run: |
+          docker build -f frontend/Dockerfile -t ${{ secrets.REGISTRY_URL }}/app-frontend:${{ github.ref_name }} ./frontend
+          docker push ${{ secrets.REGISTRY_URL }}/app-frontend:${{ github.ref_name }}
+      - name: Deploy (placeholder)
+        run: echo "Ejecutar script/helm para producción"

@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: Registro de Estudiantes API
+  version: 0.1.0
+  description: API para autenticación, pagos, talleres y notificaciones.
+servers:
+  - url: https://staging.api.ejemplo.com/api
+    description: Staging
+  - url: https://api.ejemplo.com/api
+    description: Production
+  - url: http://localhost:3000/api
+    description: Local
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    Payment:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        amount: { type: number }
+        status: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string, format: date-time }
+    Workshop:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        capacity: { type: number }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        enrolled: { type: number }
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email,password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { description: Credenciales inválidas }
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrar nuevo usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name,email,password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '201': { description: Creado }
+        '400': { description: Datos inválidos }
+  /payments:
+    get:
+      tags: [Payments]
+      summary: Listar pagos del usuario autenticado
+      responses:
+        '200':
+          description: Lista de pagos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Payment' }
+    post:
+      tags: [Payments]
+      summary: Subir comprobante de pago
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                amount:
+                  type: number
+      responses:
+        '201': { description: Creado }
+  /payments/{id}/review:
+    post:
+      tags: [Payments]
+      summary: Revisar (aprobar/rechazar) pago (admin)
+      parameters:
+        - in: path
+          name: id
+          schema: { type: string }
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+                note: { type: string }
+      responses:
+        '200': { description: Actualizado }
+        '403': { description: Sin permisos }
+  /workshops:
+    get:
+      tags: [Workshops]
+      summary: Listar talleres
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Workshop' }
+    post:
+      tags: [Workshops]
+      summary: Crear taller (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title,capacity,startDate,endDate]
+              properties:
+                title: { type: string }
+                capacity: { type: number }
+                startDate: { type: string, format: date-time }
+                endDate: { type: string, format: date-time }
+      responses:
+        '201': { description: Creado }
+  /workshops/{id}/enroll:
+    post:
+      tags: [Workshops]
+      summary: Inscribirse en taller
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Inscrito }
+        '409': { description: Cupo lleno }
